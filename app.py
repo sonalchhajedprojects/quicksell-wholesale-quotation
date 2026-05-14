@@ -4,6 +4,7 @@ import re
 import time as _time
 import hmac
 import hashlib
+import html as _html
 from datetime import date as _date
 import streamlit as st
 import extra_streamlit_components as stx
@@ -803,8 +804,8 @@ if uploaded:
                 data = parse_pdf(file_bytes)
             else:
                 data = parse_xlsx(file_bytes)
-        except Exception as e:
-            st.error(f"Could not read file: {e}")
+        except Exception:
+            st.error("Could not read file. Please check it is a valid Quicksell export.")
             st.stop()
 
     kv = data["kv"]
@@ -940,7 +941,7 @@ if uploaded:
                                 unsafe_allow_html=True)
             with c_name:
                 st.markdown(f"<p style='font-size:1.25rem;font-weight:500;line-height:1.5;{MT}'>"
-                            f"{p['name']}</p>", unsafe_allow_html=True)
+                            f"{_html.escape(p['name'])}</p>", unsafe_allow_html=True)
             with c_tax:
                 st.markdown(f"<p style='{MT}'></p>", unsafe_allow_html=True)
                 sk      = f"tax_{p['_id']}"
@@ -951,7 +952,7 @@ if uploaded:
                 taxable_map[p["name"]] = (tax == "GST")
             with c_sku:
                 st.markdown(f"<p style='font-family:monospace;color:#555;font-size:1.1rem;{MT}'>"
-                            f"{p['sku']}</p>", unsafe_allow_html=True)
+                            f"{_html.escape(p['sku'])}</p>", unsafe_allow_html=True)
             with c_retail:
                 st.markdown(f"<p style='text-align:center;font-size:1.2rem;{MT}'>"
                             f"₹{p['price']:,.0f}</p>", unsafe_allow_html=True)
