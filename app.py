@@ -2,6 +2,8 @@ import io
 import base64
 import re
 import time as _time
+import hmac
+import hashlib
 from datetime import date as _date
 import streamlit as st
 import extra_streamlit_components as stx
@@ -707,20 +709,38 @@ SESSION_TIMEOUT_MINS = 30
 COOKIE_NAME          = "cg_auth"
 _cm                  = stx.CookieManager(key="cg_cookie_mgr")
 
-def check_password() -> bool:
-    cm = _cm
-    token = cm.get(COOKIE_NAME)
+def _app_password() -> str:
+    pw = st.secrets.get("APP_PASSWORD", "")
+    if not pw:
+        st.error("APP_PASSWORD secret is not configured. Set it in Streamlit secrets.")
+        st.stop()
+    return pw
 
-    # Valid cookie → still within 30-min window
+def _sign(timestamp: str, secret: str) -> str:
+    return hmac.new(secret.encode(), timestamp.encode(), hashlib.sha256).hexdigest()
+
+def _make_token(secret: str) -> str:
+    ts = str(int(_time.time()))
+    return f"{ts}.{_sign(ts, secret)}"
+
+def _verify_token(token: str, secret: str) -> bool:
+    try:
+        ts, sig = token.rsplit(".", 1)
+        if not hmac.compare_digest(_sign(ts, secret), sig):
+            return False
+        return _time.time() - int(ts) <= SESSION_TIMEOUT_MINS * 60
+    except Exception:
+        return False
+
+def check_password() -> bool:
+    cm     = _cm
+    secret = _app_password()
+    token  = cm.get(COOKIE_NAME)
+
     if token:
-        try:
-            login_time = float(token)
-            if _time.time() - login_time <= SESSION_TIMEOUT_MINS * 60:
-                st.session_state["authenticated"] = True
-                return True
-        except (ValueError, TypeError):
-            pass
-        # Expired or invalid — clear it
+        if _verify_token(token, secret):
+            st.session_state["authenticated"] = True
+            return True
         cm.delete(COOKIE_NAME)
         st.session_state["authenticated"] = False
         st.warning("Session expired. Please log in again.")
@@ -744,9 +764,8 @@ def check_password() -> bool:
     with col:
         pwd = st.text_input("Password", type="password", placeholder="Enter password…", label_visibility="collapsed")
         if pwd:
-            if pwd == st.secrets.get("APP_PASSWORD", ""):
-                now = _time.time()
-                cm.set(COOKIE_NAME, str(now), max_age=SESSION_TIMEOUT_MINS * 60)
+            if hmac.compare_digest(pwd, secret):
+                cm.set(COOKIE_NAME, _make_token(secret), max_age=SESSION_TIMEOUT_MINS * 60)
                 st.session_state["authenticated"] = True
                 st.rerun()
             else:
